@@ -1,0 +1,6 @@
+# No external dependencies currently beyond standard library for core functionality.
+# Externe Abhängigkeiten über die Standardbibliothek hinaus sind derzeit für die Kernfunktionalität nicht erforderlich.
+# Wenn Sie pytest oder flake8 für die Entwicklung oder CI verwenden möchten, fügen Sie diese hier hinzu:
+# If you want to use pytest or flake8 for development or CI, add them here:
+# pytest
+# flake8
