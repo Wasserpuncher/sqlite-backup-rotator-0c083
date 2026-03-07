@@ -1,0 +1,38 @@
+# GitHub Actions Workflow for Python Application
+# GitHub Actions Workflow für Python-Anwendung
+
+name: Python application
+
+on: # Auslöser für den Workflow
+  push:
+    branches: [ "main" ] # Ausführen bei Push auf den Main-Branch
+  pull_request:
+    branches: [ "main" ] # Ausführen bei Pull-Requests auf den Main-Branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest # Führt den Job auf einem Ubuntu-Runner aus
+
+    steps:
+    - uses: actions/checkout@v3 # Checkt das Repository aus
+    - name: Set up Python 3.x # Richte Python ein
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.x" # Verwende die neueste Python 3-Version
+    - name: Install dependencies # Installiere Abhängigkeiten
+      run: |
+        python -m pip install --upgrade pip # Aktualisiere pip
+        pip install flake8 pytest # Installiere Linter und Test-Framework
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi # Installiere weitere Abhängigkeiten aus requirements.txt
+    - name: Lint with flake8 # Führe Linting mit flake8 aus
+      run: |
+        # stoppe den Build, wenn Dateien nicht den flake8-Standards entsprechen
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # fahre fort, Fehler und Warnungen zu zählen
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+    - name: Test with pytest # Führe Tests mit pytest aus
+      run: |
+        # Erstelle eine Dummy-Datenbank für Tests, da main.py eine existierende DB erwartet
+        touch test_db.sqlite
+        # Führe die Tests aus
+        pytest
