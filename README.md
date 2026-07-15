@@ -63,14 +63,43 @@ python main.py \
 
 ### Arguments:
 
-*   `--db-path` (required): The absolute path to your source SQLite database file.
-*   `--backup-dir` (required): The absolute path to the directory where backups will be stored.
+*   `--config` (optional): Path to a JSON configuration file (see below). Defaults to `rotator.json` in the current directory if present.
+*   `--db-path`: The path to your source SQLite database file. Required unless provided via the config file.
+*   `--backup-dir`: The path to the directory where backups will be stored. Required unless provided via the config file.
 *   `--retention-policy` (optional): A comma-separated string defining the retention policy. Default is `"daily=7,weekly=4,monthly=12"`.
     *   `daily=N`: Keep the last `N` daily backups.
     *   `weekly=M`: Keep the last `M` weekly backups.
     *   `monthly=P`: Keep the last `P` monthly backups.
 
     *Note: The rotation logic prioritizes daily, then weekly, then monthly. This means a backup might be kept if it satisfies any of the retention criteria.*
+
+### Configuration file
+
+Instead of passing every parameter on the command line, you can store the settings in a JSON configuration file (standard library only, no extra dependencies). By default the tool loads `rotator.json` from the current directory if it exists; use `--config` to point at a different file.
+
+```json
+{
+  "db_path": "/home/user/app/data.sqlite",
+  "backup_dir": "/home/user/backups",
+  "retention_policy": { "daily": 7, "weekly": 4, "monthly": 12 }
+}
+```
+
+Supported keys:
+
+*   `db_path`: Path to the source SQLite database file.
+*   `backup_dir`: Directory where backups are stored.
+*   `retention_policy`: A JSON object with any of `daily`, `weekly`, `monthly` mapped to the number of backups to keep.
+
+Precedence is **built-in defaults < config file < command-line arguments**, so an explicit flag always wins over the config file. Unknown keys are ignored.
+
+```bash
+# Use the default rotator.json in the current directory
+python main.py
+
+# Use an explicit config file, overriding the retention policy on the command line
+python main.py --config configs/prod.json --retention-policy "daily=14,weekly=8,monthly=24"
+```
 
 ### Example:
 

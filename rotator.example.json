@@ -1,0 +1,5 @@
+{
+  "db_path": "/home/user/app/data.sqlite",
+  "backup_dir": "/home/user/backups",
+  "retention_policy": { "daily": 7, "weekly": 4, "monthly": 12 }
+}

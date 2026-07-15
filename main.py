@@ -1,5 +1,7 @@
 import argparse
+import json
 import logging
+import os
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,6 +12,65 @@ logging.basicConfig(
     level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Standardname der Konfigurationsdatei, die geladen wird, wenn --config nicht angegeben ist.
+DEFAULT_CONFIG_FILENAME = "rotator.json"
+
+# Bekannte Konfigurationsschlüssel.
+CONFIG_KEYS = ("db_path", "backup_dir", "retention_policy")
+
+# Eingebaute Standard-Aufbewahrungsrichtlinie.
+DEFAULT_RETENTION_POLICY = {"daily": 7, "weekly": 4, "monthly": 12}
+
+
+def load_config(path: str) -> Dict:
+    """
+    Loads a JSON configuration file and returns the known keys.
+
+    Lädt eine JSON-Konfigurationsdatei und gibt die bekannten Schlüssel zurück.
+
+    Args:
+        path (str): Path to the JSON config file. / Pfad zur JSON-Konfigurationsdatei.
+
+    Returns:
+        Dict: The loaded configuration (known keys only).
+              Die geladene Konfiguration (nur bekannte Schlüssel).
+
+    Raises:
+        FileNotFoundError: If the file does not exist. / Wenn die Datei nicht existiert.
+        ValueError: If the file is not a valid JSON object or 'retention_policy'
+                    is not an object. / Wenn die Datei kein gültiges JSON-Objekt ist.
+    """
+    with open(path, "r", encoding="utf-8") as f:  # Öffnet die Datei.
+        data = json.load(f)  # Parst JSON (stdlib, keine externen Deps).
+    if not isinstance(data, dict):
+        raise ValueError("Config file must contain a JSON object.")
+    config = {k: v for k, v in data.items() if k in CONFIG_KEYS}
+    if "retention_policy" in config and not isinstance(config["retention_policy"], dict):
+        raise ValueError("'retention_policy' in config must be a JSON object, e.g. {\"daily\": 7}.")
+    return config
+
+
+def resolve_settings(cli_overrides: Dict, config: Dict) -> Dict:
+    """
+    Merges built-in defaults, the config file and CLI overrides.
+
+    Führt eingebaute Defaults, die Config-Datei und CLI-Argumente zusammen.
+
+    Precedence (ascending): defaults < config < CLI. Only non-None values override.
+    Vorrang (aufsteigend): Defaults < Config < CLI. Nur Werte, die nicht None sind,
+    überschreiben.
+    """
+    settings = {
+        "db_path": None,
+        "backup_dir": None,
+        "retention_policy": dict(DEFAULT_RETENTION_POLICY),
+    }
+    for source in (config, cli_overrides):
+        for key in CONFIG_KEYS:
+            if source.get(key) is not None:
+                settings[key] = source[key]
+    return settings
 
 class BackupRotator:
     """
@@ -208,10 +269,10 @@ class BackupRotator:
             for backup in all_backups:
                 backup_dt = get_dt_from_backup_path(backup) # Zeitstempel der Sicherung
                 # Nur Sicherungen außerhalb des täglichen und wöchentlichen Aufbewahrungszeitraums berücksichtigen
-                if backup not in kept_backups and 
-                   (now - backup_dt).days >= self.retention_policy.get('daily', 0) and 
-                   (now - backup_dt).days >= self.retention_policy.get('weekly', 0) * 7:
-                    
+                if (backup not in kept_backups and
+                        (now - backup_dt).days >= self.retention_policy.get('daily', 0) and
+                        (now - backup_dt).days >= self.retention_policy.get('weekly', 0) * 7):
+
                     current_year_month = (backup_dt.year, backup_dt.month)
 
                     if last_kept_year_month is None or current_year_month != last_kept_year_month:
@@ -265,31 +326,61 @@ def main() -> None:
         description="Automatischer SQLite-Datenbank-Backup-Rotator."
     )
     parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help=f"Pfad zu einer JSON-Konfigurationsdatei (Standard: {DEFAULT_CONFIG_FILENAME}, falls vorhanden)."
+    )
+    parser.add_argument(
         "--db-path",
-        type=Path,
-        required=True,
-        help="Pfad zur SQLite-Quelldatenbankdatei."
+        type=str,
+        default=None,
+        help="Pfad zur SQLite-Quelldatenbankdatei. Optional, wenn in der Config-Datei gesetzt."
     )
     parser.add_argument(
         "--backup-dir",
-        type=Path,
-        required=True,
-        help="Verzeichnis, in dem Sicherungen gespeichert werden sollen."
+        type=str,
+        default=None,
+        help="Verzeichnis, in dem Sicherungen gespeichert werden sollen. Optional, wenn in der Config-Datei gesetzt."
     )
     parser.add_argument(
         "--retention-policy",
         type=str,
-        default="daily=7,weekly=4,monthly=12",
+        default=None,
         help="Aufbewahrungsrichtlinie (z.B. 'daily=7,weekly=4,monthly=12')."
     )
 
     args = parser.parse_args()
 
     try:
-        retention_policy = parse_retention_policy(args.retention_policy)
-        rotator = BackupRotator(args.db_path, args.backup_dir, retention_policy)
+        # Konfigurationsdatei bestimmen: explizit via --config oder Standarddatei, falls vorhanden.
+        config = {}
+        config_path = args.config
+        if config_path is None and os.path.isfile(DEFAULT_CONFIG_FILENAME):
+            config_path = DEFAULT_CONFIG_FILENAME
+        if config_path is not None:
+            config = load_config(config_path)
+            logger.info(f"Konfiguration geladen aus: {config_path}")
+
+        cli_overrides = {
+            "db_path": args.db_path,
+            "backup_dir": args.backup_dir,
+            # Ein CLI-String wird sofort in ein dict geparst; None bedeutet "nicht gesetzt".
+            "retention_policy": parse_retention_policy(args.retention_policy) if args.retention_policy else None,
+        }
+        settings = resolve_settings(cli_overrides, config)
+
+        if not settings["db_path"]:
+            parser.error("A database path is required, either via --db-path or 'db_path' in the config file.")
+        if not settings["backup_dir"]:
+            parser.error("A backup directory is required, either via --backup-dir or 'backup_dir' in the config file.")
+
+        db_path = Path(settings["db_path"])
+        backup_dir = Path(settings["backup_dir"])
+        retention_policy = settings["retention_policy"]
+        rotator = BackupRotator(db_path, backup_dir, retention_policy)
         
-        logger.info(f"Starte Sicherung für {args.db_path}...")
+        logger.info(f"Starte Sicherung für {db_path}...")
         new_backup_path = rotator.perform_backup()
         logger.info(f"Sicherung erstellt: {new_backup_path}")
         
