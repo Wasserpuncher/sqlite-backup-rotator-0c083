@@ -1,8 +1,8 @@
 # SQLite Backup Rotator
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
-![License](https://img.shields.io/github/license/username/repo-name)
-![CI Status](https://github.com/username/repo-name/workflows/Python%20application/badge.svg)
+![License](https://img.shields.io/github/license/Wasserpuncher/sqlite-backup-rotator-0c083)
+![CI Status](https://github.com/Wasserpuncher/sqlite-backup-rotator-0c083/workflows/Python%20application/badge.svg)
 
 ## 📚 Project Description
 
@@ -32,7 +32,7 @@ This project aims to be simple, reliable, and easily integratable into various s
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/sqlite-backup-rotator.git
+    git clone https://github.com/Wasserpuncher/sqlite-backup-rotator-0c083.git
     cd sqlite-backup-rotator
     ```
 
